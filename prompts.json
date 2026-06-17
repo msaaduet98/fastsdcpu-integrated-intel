@@ -1,0 +1,12 @@
+[
+  "a smiling red apple",
+  "a cute robot waving",
+  "a coffee cup with steam",
+  "a happy cartoon sun",
+  "a paper airplane",
+  "a light bulb idea icon",
+  "a rocket ship launching",
+  "a friendly speech bubble",
+  { "prompt": "a green potted cactus", "seed": 42 },
+  { "prompt": "a sleepy cat curled up", "seed": 7 }
+]

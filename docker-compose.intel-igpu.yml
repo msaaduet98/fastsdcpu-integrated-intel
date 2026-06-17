@@ -1,0 +1,60 @@
+# docker-compose.intel-igpu.yml
+# ---------------------------------------------------------------------------
+# Runs FastSD CPU with OpenVINO on the Intel integrated GPU.
+#
+#   Web UI (default):   docker compose -f docker-compose.intel-igpu.yml up --build
+#                       -> open http://localhost:7860  (pick an OpenVINO model, set GPU)
+#
+#   Batch generation:   docker compose -f docker-compose.intel-igpu.yml run --rm \
+#                         fastsdcpu-igpu python batch_generate.py
+#
+# Volumes persist across rebuilds:
+#   hf_cache      -> downloaded HuggingFace / OpenVINO models
+#   ./lora_models -> your LoRA files
+#   ./output      -> images written by batch_generate.py
+# ---------------------------------------------------------------------------
+services:
+  fastsdcpu-igpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.intel-igpu
+    container_name: fastsdcpu-igpu
+
+    ports:
+      - "7860:7860"
+
+    # Expose the host's GPU render node to the container.
+    devices:
+      - "/dev/dri:/dev/dri"
+
+    # ===================================================================
+    # !!! REPLACE THE GID BELOW WITH *YOUR* HOST'S "render" GROUP GID !!!
+    # -------------------------------------------------------------------
+    # The container user must belong to the group that owns /dev/dri/renderD128
+    # or OpenVINO cannot open the iGPU. Find your host's render GID with:
+    #
+    #     getent group render
+    #
+    # Output looks like:  render:x:992:
+    #                                ^^^  <- that number is the GID
+    #
+    # 992 below was the render GID on the machine this repo was generated on.
+    # If `getent group render` prints a different number on YOUR host, change it.
+    # ===================================================================
+    group_add:
+      - "992"   # <-- render group GID; verify with `getent group render`
+
+    environment:
+      - DEVICE=GPU
+      - HF_HOME=/data/huggingface
+      - TRANSFORMERS_CACHE=/data/huggingface/transformers
+      - HF_DATASETS_CACHE=/data/huggingface/datasets
+      - PYTHONUNBUFFERED=1
+
+    volumes:
+      - hf_cache:/data/huggingface
+      - ./lora_models:/app/lora_models
+      - ./output:/app/output
+
+volumes:
+  hf_cache:

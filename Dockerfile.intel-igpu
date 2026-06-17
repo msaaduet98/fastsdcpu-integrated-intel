@@ -1,0 +1,50 @@
+# Dockerfile.intel-igpu
+# ---------------------------------------------------------------------------
+# FastSD CPU image built to run OpenVINO inference on an Intel integrated GPU
+# (e.g. Intel Core Ultra iGPU) instead of plain CPU.
+#
+# Difference vs the upstream ./Dockerfile:
+#   - installs the Intel OpenCL + Level Zero GPU runtime INSIDE the image so
+#     OpenVINO can target the iGPU
+#   - sets DEVICE=GPU (read by src/constants.py -> backend/device.py)
+#
+# Run via:  docker compose -f docker-compose.intel-igpu.yml up --build
+# The host must pass /dev/dri and the render group into the container
+# (handled in docker-compose.intel-igpu.yml).
+# ---------------------------------------------------------------------------
+FROM ghcr.io/astral-sh/uv:python3.11-trixie-slim
+
+# Base build/runtime deps (same as upstream) + Intel GPU compute runtime.
+#   intel-opencl-icd     -> Intel "NEO" OpenCL driver for the iGPU
+#   intel-level-zero-gpu -> Level Zero backend for the iGPU (OpenVINO GPU plugin)
+#   level-zero           -> Level Zero loader (libze_loader)
+#   clinfo               -> lets you verify the GPU is visible: `clinfo`
+#
+# NOTE: package names above are the Debian trixie names. On very new silicon
+# (Lunar/Arrow Lake) you may need Intel's own compute-runtime repo if the
+# Debian driver is too old. Verify inside the container with `clinfo` — it
+# should list your Intel iGPU under "Device Name".
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl build-essential libgl1 libglib2.0-0 \
+    intel-opencl-icd intel-level-zero-gpu level-zero \
+    ocl-icd-libopencl1 clinfo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Target the Intel iGPU via OpenVINO's GPU plugin.
+ENV DEVICE=GPU
+
+WORKDIR /app
+COPY . .
+
+# CPU torch build is fine — OpenVINO (not torch) does the GPU work here.
+RUN uv pip install --system --no-cache-dir \
+    torch==2.8.0 torchvision==0.23.0 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN uv pip install --system --no-cache-dir -r requirements.txt
+
+EXPOSE 7860
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+
+# Default to the web UI (override `command:` in compose to run batch_generate.py).
+CMD ["python", "src/app.py", "--webui"]
