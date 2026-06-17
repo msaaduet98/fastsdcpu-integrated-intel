@@ -1,0 +1,88 @@
+name: 🐞 Bug Report
+description: Report a bug or unexpected behavior in fastsdcpu
+title: "[Bug]: "
+labels: ["bug"]
+assignees:
+  - rupeshs
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug in **fastsdcpu** 🙏  
+        Please fill out the details below.
+
+  - type: input
+    id: version
+    attributes:
+      label: fastsdcpu Version
+      description: Which version or commit are you using?
+      placeholder: e.g. v0.1.0 or commit hash
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What went wrong?
+      placeholder: Describe the issue clearly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Run command ...
+        2. Load model ...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Paste logs or stack traces (if any)
+      render: shell
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Android/Termux
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware / CPU
+      description: CPU details (e.g., x64, ARM)
+      placeholder: e.g. Intel i7, AMD Ryzen 7000 
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: I am using a supported environment
+          required: true
