@@ -65,8 +65,18 @@ Verify the GPU is actually visible inside the container:
 
 ```bash
 docker compose -f docker-compose.intel-igpu.yml run --rm fastsdcpu-igpu clinfo | grep -i "device name"
-# should list your Intel iGPU
+# should list your Intel iGPU, e.g. "Intel(R) Graphics [0x7dd1]"  OpenCL 3.0 NEO
 ```
+
+> **Driver note:** the image pulls the Intel NEO compute runtime (24.39+) from
+> Intel's own apt repo, because Ubuntu's bundled driver predates recent Core
+> Ultra iGPUs (this was verified on Arrow Lake-P, Core Ultra 7 255H) and
+> reports 0 OpenCL devices. If `clinfo` shows no Intel device, that's the layer
+> to update.
+>
+> **Performance:** OpenVINO compiles GPU kernels on the *first* inference of a
+> run (~20s), then each 512×512 / 1-step image is ~0.5s. `batch_generate.py`
+> loads the model once, so a batch pays that compile cost only once.
 
 ### Persistent volumes
 

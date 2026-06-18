@@ -1,34 +1,46 @@
 # Dockerfile.intel-igpu
 # ---------------------------------------------------------------------------
-# FastSD CPU image built to run OpenVINO inference on an Intel integrated GPU
+# FastSD CPU image that runs OpenVINO inference on an Intel integrated GPU
 # (e.g. Intel Core Ultra iGPU) instead of plain CPU.
 #
-# Difference vs the upstream ./Dockerfile:
-#   - installs the Intel OpenCL + Level Zero GPU runtime INSIDE the image so
-#     OpenVINO can target the iGPU
-#   - sets DEVICE=GPU (read by src/constants.py -> backend/device.py)
+# Base is Ubuntu 24.04 (NOT the upstream uv/Debian image) on purpose:
+# Debian trixie no longer ships the Intel "NEO" OpenCL driver. The `uv` binary
+# and Python 3.11 (upstream pins need 3.11 — Pillow 9.4.0 has no 3.12 wheel)
+# are added on top.
+#
+# The Intel GPU compute runtime is pulled from Intel's OWN apt repo (not
+# Ubuntu's), because Ubuntu 24.04's bundled driver (23.43) predates this
+# laptop's Arrow Lake-P iGPU (Core Ultra 7 255H, PCI 8086:7dd1) and enumerates
+# 0 OpenCL devices. Intel's repo ships 24.39+, which supports Arrow Lake.
+#   intel-opencl-icd   -> Intel NEO OpenCL driver for the iGPU (the key one)
+#   libze-intel-gpu1   -> Level Zero GPU backend (was "intel-level-zero-gpu")
+#   libze1             -> Level Zero loader (was "level-zero")
+#   clinfo             -> verify the GPU is visible: `clinfo`
 #
 # Run via:  docker compose -f docker-compose.intel-igpu.yml up --build
-# The host must pass /dev/dri and the render group into the container
-# (handled in docker-compose.intel-igpu.yml).
+# The host must pass /dev/dri + the render group (see the compose file).
+# Intel client GPU repo docs: https://dgpu-docs.intel.com/driver/client/overview.html
 # ---------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:python3.11-trixie-slim
+FROM ubuntu:24.04
 
-# Base build/runtime deps (same as upstream) + Intel GPU compute runtime.
-#   intel-opencl-icd     -> Intel "NEO" OpenCL driver for the iGPU
-#   intel-level-zero-gpu -> Level Zero backend for the iGPU (OpenVINO GPU plugin)
-#   level-zero           -> Level Zero loader (libze_loader)
-#   clinfo               -> lets you verify the GPU is visible: `clinfo`
-#
-# NOTE: package names above are the Debian trixie names. On very new silicon
-# (Lunar/Arrow Lake) you may need Intel's own compute-runtime repo if the
-# Debian driver is too old. Verify inside the container with `clinfo` — it
-# should list your Intel iGPU under "Device Name".
+# Enable universe (clinfo lives there).
+RUN sed -i 's/Components: main restricted/Components: main restricted universe multiverse/' \
+        /etc/apt/sources.list.d/ubuntu.sources
+
+# Add Intel's client GPU apt repo, then install the current NEO compute runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl build-essential libgl1 libglib2.0-0 \
-    intel-opencl-icd intel-level-zero-gpu level-zero \
-    ocl-icd-libopencl1 clinfo \
+        git curl ca-certificates gnupg build-essential libgl1 libglib2.0-0 clinfo \
+    && curl -fsSL https://repositories.intel.com/gpu/intel-graphics.key \
+        | gpg --dearmor -o /usr/share/keyrings/intel-graphics.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble client" \
+        > /etc/apt/sources.list.d/intel-gpu.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        intel-opencl-icd libze-intel-gpu1 libze1 ocl-icd-libopencl1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Bring in the `uv` package manager from its official image.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Target the Intel iGPU via OpenVINO's GPU plugin.
 ENV DEVICE=GPU
@@ -36,12 +48,17 @@ ENV DEVICE=GPU
 WORKDIR /app
 COPY . .
 
+# uv-managed Python 3.11 venv (keeps upstream's pinned deps working).
+RUN uv venv --python 3.11 /opt/venv
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 # CPU torch build is fine — OpenVINO (not torch) does the GPU work here.
-RUN uv pip install --system --no-cache-dir \
+RUN uv pip install --no-cache-dir \
     torch==2.8.0 torchvision==0.23.0 \
     --index-url https://download.pytorch.org/whl/cpu
 
-RUN uv pip install --system --no-cache-dir -r requirements.txt
+RUN uv pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 7860
 ENV GRADIO_SERVER_NAME="0.0.0.0"
